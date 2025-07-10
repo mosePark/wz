@@ -37,7 +37,7 @@ def prepare_data(df, tag, freq='5S'):
     return pivot
 
 # 3) One-Class SVM 이상탐지 함수
-def ocsvm_detect(X, train_frac=0.7, nu=0.01, kernel='rbf', gamma='scale'):
+def ocsvm_detect(X, train_frac=0.95, nu=0.1, kernel='rbf', gamma='scale'):
     n_train = int(len(X) * train_frac)
     scaler = StandardScaler().fit(X[:n_train])
     X_s = scaler.transform(X)
@@ -55,15 +55,21 @@ first_tag = df['parent_tag'].unique()[0]
 pivot = prepare_data(df, first_tag)
 X = pivot.values
 
-scores, preds, n_train = ocsvm_detect(X, train_frac=0.9)
+scores, preds, n_train = ocsvm_detect(X, train_frac=0.95)
 time_idx = pivot.index
 
+# 수동 임계값 설정 (더 엄격하게)
+threshold = -0.05  # 또는 np.percentile(scores, 5)
+manual_preds = np.where(scores < threshold, -1, 1)
+
+# 시각화
 plt.figure(figsize=(10,4))
 plt.plot(time_idx, scores, label='Decision function')
-plt.axhline(0, color='red', linestyle='--', label='Threshold = 0')
-# 이상치 마커
-anomalies = time_idx[preds == -1]
-plt.scatter(anomalies, np.zeros_like(anomalies), color='red', s=50, marker='x', label='Anomaly')
+plt.axhline(threshold, color='red', linestyle='--', label=f'Threshold = {threshold}')
+# 이상치 마커 (수동 임계값 사용)
+anomalies = time_idx[manual_preds == -1]
+plt.scatter(anomalies, np.full_like(anomalies, threshold, dtype=float), 
+           color='red', s=50, marker='x', label='Anomaly')
 
 plt.title(f'One-Class SVM 이상탐지: {first_tag}')
 plt.xlabel('Time')
@@ -71,5 +77,19 @@ plt.ylabel('Score')
 plt.legend()
 plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
 plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+print(f"탐지된 이상치 개수: {np.sum(manual_preds == -1)}")
+print(f"전체 데이터 대비 이상치 비율: {np.sum(manual_preds == -1)/len(manual_preds):.2%}")
+
+# 점수 분포 확인
+plt.figure(figsize=(10,3))
+plt.hist(scores, bins=20, alpha=0.7, edgecolor='black')
+plt.axvline(threshold, color='red', linestyle='--', label=f'Threshold = {threshold}')
+plt.xlabel('Decision function score')
+plt.ylabel('Frequency')
+plt.title('Decision Function Score 분포')
+plt.legend()
 plt.tight_layout()
 plt.show()
